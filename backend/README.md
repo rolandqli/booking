@@ -24,6 +24,8 @@ Copy `.env.example` to `.env` and set:
 |----------|-------------|
 | `SUPABASE_URL` | Your Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key (Project Settings → API) |
+| `OPENAI_API_KEY` | OpenAI API key (for chat) |
+| `OPENAI_CHAT_MODEL` | Optional; defaults to `gpt-4o-mini` |
 
 ### 3. Database setup
 
@@ -74,6 +76,15 @@ backend/
 |--------|----------|-------------|
 | GET | `/` | API status |
 | GET | `/health` | Health check |
+
+### Chat (LangChain)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/chat/` | Send a message, get AI response |
+
+**Request body:** `{ "message": "string" }`  
+**Response:** `{ "response": "string" }`
 
 ### Providers
 
@@ -139,6 +150,8 @@ backend/
 **List query params:** `?client_id=uuid&provider_id=uuid&room_id=uuid&status=scheduled`
 
 **Reference validation:** Creating an appointment requires that the `client_id` and `provider_id` exist. If `room_id` is provided, it must also exist. Otherwise the API returns `404` with `Client not found`, `Provider not found`, or `Room not found`.
+
+**No double-booking:** A client or provider cannot have multiple appointments at the same time. Overlapping appointments return `409 Conflict` with `Client already has an appointment at this time` or `Provider already has an appointment at this time`. Canceled appointments are excluded from this check.
 
 ---
 

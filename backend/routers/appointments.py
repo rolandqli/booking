@@ -58,6 +58,57 @@ def _serialize_uuid(v):
     return str(v) if v is not None else None
 
 
+def _times_overlap(
+    start_a: datetime, end_a: datetime, start_b: datetime, end_b: datetime
+) -> bool:
+    """Return True if the two time ranges overlap."""
+    return start_a < end_b and end_a > start_b
+
+def _check_all_appointments_for_overlap(
+    supabase,
+    person_id: UUID, 
+    person_type: str,
+    start_time: datetime,
+    end_time: datetime,
+) -> None:
+    """Raise HTTPException if any appointment overlaps with the given time range."""
+    id_type = f"{person_type.lower()}_id" 
+    appointments = (
+        supabase.table("appointments")
+        .select("id, start_time, end_time, status")
+        .eq(id_type, str(person_id))
+        .neq("status", "canceled")
+        .execute()
+    )
+    for apt in appointments.data or []:
+        existing_start = datetime.fromisoformat(apt["start_time"].replace("Z", "+00:00"))
+        existing_end = datetime.fromisoformat(apt["end_time"].replace("Z", "+00:00"))
+        if _times_overlap(start_time, end_time, existing_start, existing_end):
+            detail = f"{person_type} already has an appointment at this time"
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=detail
+            )
+
+def _check_no_client_provider_overlap(
+    supabase,
+    client_id: UUID,
+    provider_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    exclude_appointment_id: Optional[UUID] = None,
+) -> None:
+    """Raise HTTPException if client or provider already has an appointment at the same time."""
+    for person_id, person_type in [(client_id, "Client"), (provider_id, "Provider")]:
+        _check_all_appointments_for_overlap(
+            supabase,
+            person_id=person_id,
+            person_type=person_type,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+
 def _validate_appointment_references(supabase, client_id: UUID, provider_id: UUID, room_id: Optional[UUID]) -> None:
     """Raise HTTPException if client, provider, or room (if provided) do not exist."""
     client_resp = (
@@ -108,6 +159,13 @@ def create_appointment(appointment: AppointmentCreate):
         appointment.client_id,
         appointment.provider_id,
         appointment.room_id,
+    )
+    _check_no_client_provider_overlap(
+        supabase,
+        appointment.client_id,
+        appointment.provider_id,
+        appointment.start_time,
+        appointment.end_time,
     )
     data = appointment.model_dump()
     data = {k: _serialize_uuid(v) for k, v in data.items()}
@@ -168,12 +226,47 @@ def get_appointment(appointment_id: UUID):
 def update_appointment(appointment_id: UUID, appointment: AppointmentUpdate):
     """Update an appointment."""
     supabase = get_supabase()
+    existing = (
+        supabase.table("appointments")
+        .select("*")
+        .eq("id", str(appointment_id))
+        .maybe_single()
+        .execute()
+    )
+    if existing.data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
     data = appointment.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update",
         )
+    effective = {**existing.data, **data}
+    client_id = effective.get("client_id")
+    provider_id = effective.get("provider_id")
+    start_time = effective.get("start_time")
+    end_time = effective.get("end_time")
+    if isinstance(start_time, str):
+        start_time = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+    if isinstance(end_time, str):
+        end_time = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+    _validate_appointment_references(
+        supabase,
+        client_id,
+        provider_id,
+        effective.get("room_id"),
+    )
+    _check_no_client_provider_overlap(
+        supabase,
+        client_id,
+        provider_id,
+        start_time,
+        end_time,
+        exclude_appointment_id=appointment_id,
+    )
     data = {k: _serialize_uuid(v) for k, v in data.items()}
     data["updated_at"] = datetime.utcnow().isoformat()
     response = (
