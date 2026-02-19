@@ -51,6 +51,8 @@ API base URL: `http://localhost:8000`
 backend/
 ├── main.py              # FastAPI app, CORS, router registration
 ├── database.py          # Supabase client factory
+├── run_with_test_db.py  # Start server with test DB (.env.test)
+├── .env.test.example    # Template for test Supabase credentials
 ├── requirements.txt
 ├── routers/
 │   ├── providers.py     # Provider CRUD
@@ -159,8 +161,36 @@ backend/
 
 ## Testing
 
+### Unit tests (mocked DB)
+
 ```bash
-pytest tests/ -v
+pytest tests/ -v -k "not integration"
 ```
 
 Tests use an in-memory mock of Supabase (no real DB). They cover CRUD for all resources and appointment validation when client, provider, or room references are missing.
+
+### Integration tests (separate test DB)
+
+Uses a **separate Supabase project** so it does not affect your dev data.
+
+**Setup (one-time):**
+
+1. Create a test Supabase project at [supabase.com/dashboard](https://supabase.com/dashboard).
+2. Run migrations 001, 002, 003 in the test project's SQL editor.
+3. Copy `backend/.env.test.example` to `backend/.env.test` and set the test project's URL and service role key.
+
+**Run:**
+
+```bash
+# Terminal 1: start backend with test DB
+python run_with_test_db.py
+
+# Terminal 2: run integration tests
+pytest tests/test_integration.py -v
+```
+
+Or with `API_URL` if the backend is on a different port:
+
+```bash
+API_URL=http://localhost:8000 pytest tests/test_integration.py -v
+```
