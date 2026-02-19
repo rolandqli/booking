@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.env.test
 
 # Python
 __pycache__/
@@ -31,6 +32,12 @@ supabase/.temp
 # Logs
 *.log
 logs/
+
+# Testing
+.pytest_cache/
+coverage/
+htmlcov/
+.coverage
 
 # Build / dist
 dist/
