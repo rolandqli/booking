@@ -17,11 +17,7 @@ Next.js frontend for the AI-assisted booking system. Displays a calendar with pr
    npm install
    ```
 
-2. Create `.env.local` (optional; defaults to `http://localhost:8000`):
-
-   ```
-   NEXT_PUBLIC_API_URL=http://localhost:8000
-   ```
+2. Create `.env.local` (optional; defaults to `http://localhost:8000`)
 
 3. Ensure the backend is running.
 
