@@ -58,10 +58,57 @@ def _serialize_uuid(v):
     return str(v) if v is not None else None
 
 
+def _validate_appointment_references(supabase, client_id: UUID, provider_id: UUID, room_id: Optional[UUID]) -> None:
+    """Raise HTTPException if client, provider, or room (if provided) do not exist."""
+    client_resp = (
+        supabase.table("clients")
+        .select("id")
+        .eq("id", str(client_id))
+        .maybe_single()
+        .execute()
+    )
+    if client_resp.data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found",
+        )
+    provider_resp = (
+        supabase.table("providers")
+        .select("id")
+        .eq("id", str(provider_id))
+        .maybe_single()
+        .execute()
+    )
+    if provider_resp.data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider not found",
+        )
+    if room_id is not None:
+        room_resp = (
+            supabase.table("rooms")
+            .select("id")
+            .eq("id", str(room_id))
+            .maybe_single()
+            .execute()
+        )
+        if room_resp.data is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Room not found",
+            )
+
+
 @router.post("/", response_model=AppointmentResponse)
 def create_appointment(appointment: AppointmentCreate):
     """Create a new appointment."""
     supabase = get_supabase()
+    _validate_appointment_references(
+        supabase,
+        appointment.client_id,
+        appointment.provider_id,
+        appointment.room_id,
+    )
     data = appointment.model_dump()
     data = {k: _serialize_uuid(v) for k, v in data.items()}
     data["updated_at"] = datetime.utcnow().isoformat()
