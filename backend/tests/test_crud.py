@@ -180,3 +180,106 @@ class TestAppointmentsCRUD:
         )
         assert response.status_code == 404
         assert "Room not found" in response.json()["detail"]
+
+    def test_create_appointment_fails_when_client_has_overlapping_appointment(
+        self, client, mock_db
+    ):
+        provider1 = client.post("/providers/", json={"name": "Dr. P1"}).json()
+        provider2 = client.post("/providers/", json={"name": "Dr. P2"}).json()
+        client_resp = client.post(
+            "/clients/", json={"first_name": "John", "last_name": "Doe"}
+        ).json()
+
+        start = datetime.utcnow() + timedelta(hours=1)
+        end = start + timedelta(minutes=30)
+
+        client.post(
+            "/appointments/",
+            json={
+                "client_id": str(client_resp["id"]),
+                "provider_id": str(provider1["id"]),
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat(),
+            },
+        )
+
+        response = client.post(
+            "/appointments/",
+            json={
+                "client_id": str(client_resp["id"]),
+                "provider_id": str(provider2["id"]),
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat(),
+            },
+        )
+        assert response.status_code == 409
+        assert "Client already has an appointment" in response.json()["detail"]
+
+    def test_create_appointment_fails_when_provider_has_overlapping_appointment(
+        self, client, mock_db
+    ):
+        provider = client.post("/providers/", json={"name": "Dr. P"}).json()
+        client1 = client.post(
+            "/clients/", json={"first_name": "John", "last_name": "Doe"}
+        ).json()
+        client2 = client.post(
+            "/clients/", json={"first_name": "Jane", "last_name": "Doe"}
+        ).json()
+
+        start = datetime.utcnow() + timedelta(hours=1)
+        end = start + timedelta(minutes=30)
+
+        client.post(
+            "/appointments/",
+            json={
+                "client_id": str(client1["id"]),
+                "provider_id": str(provider["id"]),
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat(),
+            },
+        )
+
+        response = client.post(
+            "/appointments/",
+            json={
+                "client_id": str(client2["id"]),
+                "provider_id": str(provider["id"]),
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat(),
+            },
+        )
+        assert response.status_code == 409
+        assert "Provider already has an appointment" in response.json()["detail"]
+
+    def test_create_appointment_succeeds_when_times_dont_overlap(self, client, mock_db):
+        provider = client.post("/providers/", json={"name": "Dr. P"}).json()
+        client_resp = client.post(
+            "/clients/", json={"first_name": "John", "last_name": "Doe"}
+        ).json()
+
+        start1 = datetime.utcnow() + timedelta(hours=1)
+        end1 = start1 + timedelta(minutes=30)
+        start2 = datetime.utcnow() + timedelta(hours=2)
+        end2 = start2 + timedelta(minutes=30)
+
+        r1 = client.post(
+            "/appointments/",
+            json={
+                "client_id": str(client_resp["id"]),
+                "provider_id": str(provider["id"]),
+                "start_time": start1.isoformat(),
+                "end_time": end1.isoformat(),
+            },
+        )
+        assert r1.status_code == 200
+
+        r2 = client.post(
+            "/appointments/",
+            json={
+                "client_id": str(client_resp["id"]),
+                "provider_id": str(provider["id"]),
+                "start_time": start2.isoformat(),
+                "end_time": end2.isoformat(),
+            },
+        )
+        assert r2.status_code == 200

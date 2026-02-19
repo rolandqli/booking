@@ -26,16 +26,19 @@ def make_mock_store():
         store[table].append(row)
         return row
 
-    def find_rows(table: str, filters: dict) -> list:
+    def find_rows(table: str, filters: dict, neq_filters: Optional[dict] = None) -> list:
         rows = list(store.get(table, []))
         for col, val in filters.items():
             rows = [r for r in rows if str(r.get(col)) == str(val)]
+        for col, val in (neq_filters or {}).items():
+            rows = [r for r in rows if str(r.get(col)) != str(val)]
         return rows
 
     class TableMock:
         def __init__(self, table_name: str):
             self._table = table_name
             self._filters = {}
+            self._neq_filters = {}
             self._order = None
             self._single = False
             self._update_data = None
@@ -65,6 +68,10 @@ def make_mock_store():
             self._filters[col] = val
             return self
 
+        def neq(self, col: str, val: Any):
+            self._neq_filters[col] = val
+            return self
+
         def order(self, col: str, desc: bool = False):
             self._order = (col, desc)
             return self
@@ -74,7 +81,7 @@ def make_mock_store():
             return self
 
         def execute(self):
-            rows = find_rows(self._table, self._filters)
+            rows = find_rows(self._table, self._filters, self._neq_filters)
             if self._op == "select":
                 if self._single:
                     data = rows[0] if rows else None

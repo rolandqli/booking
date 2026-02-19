@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import appointments, clients, providers, rooms
+from routers import appointments, chat, clients, providers, rooms
 
 # Initialize
 app = FastAPI()
 
 app.include_router(providers.router)
+app.include_router(chat.router)
 app.include_router(rooms.router)
 app.include_router(clients.router)
 app.include_router(appointments.router)
