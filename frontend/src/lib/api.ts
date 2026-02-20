@@ -17,3 +17,13 @@ export async function getAppointments(): Promise<import("@/types").Appointment[]
 export async function getClients(): Promise<import("@/types").Client[]> {
   return fetcher("/clients/");
 }
+
+export async function sendChatMessage(message: string): Promise<{ response: string }> {
+  const res = await fetch(`${API_BASE}/chat/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) throw new Error(`Chat error: ${res.status}`);
+  return res.json();
+}
