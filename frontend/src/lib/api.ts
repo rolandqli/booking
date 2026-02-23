@@ -18,11 +18,15 @@ export async function getClients(): Promise<import("@/types").Client[]> {
   return fetcher("/clients/");
 }
 
-export async function sendChatMessage(message: string): Promise<{ response: string }> {
+export async function sendChatMessage(
+  message: string,
+  timezone?: string
+): Promise<{ response: string }> {
+  const tz = timezone ?? (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined);
   const res = await fetch(`${API_BASE}/chat/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, timezone: tz }),
   });
   if (!res.ok) throw new Error(`Chat error: ${res.status}`);
   return res.json();
