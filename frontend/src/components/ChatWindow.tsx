@@ -32,12 +32,13 @@ export default function ChatWindow() {
     if (!text || loading) return;
 
     setInput("");
+    const prevMessages = messages;
     setMessages((m) => [...m, { role: "user", content: text }]);
     setLoading(true);
     setError(null);
 
     try {
-      const { response } = await sendChatMessage(text);
+      const { response } = await sendChatMessage(text, { history: prevMessages });
       setMessages((m) => [...m, { role: "assistant", content: response }]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to get response");

@@ -7,7 +7,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, status
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -32,12 +32,9 @@ def _to_utc_str(dt: datetime) -> str:
 
 def _to_local_display(dt: datetime) -> tuple[str, str]:
     """(time_str, date_str) in user's timezone for display."""
-    print(dt)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    print(dt)
     local = dt.astimezone(ZoneInfo(_get_tz()))
-    print(local)
     return local.strftime("%I:%M %p").lstrip("0"), local.strftime("%Y-%m-%d")
 
 
@@ -62,11 +59,17 @@ For dates: YYYY-MM-DD, 'today', or 'tomorrow'. For time only, use 'today'.
 Be concise and helpful. If you don't know something, say so."""
 
 
+class _HistoryItem(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
 class ChatRequest(BaseModel):
     """Schema for chat request."""
 
     message: str
     timezone: Optional[str] = None  # IANA timezone e.g. America/New_York; uses UTC if omitted
+    history: Optional[list[_HistoryItem]] = None  # previous messages for conversational memory
 
 
 class ChatResponse(BaseModel):
@@ -581,10 +584,15 @@ def chat(request: ChatRequest):
     tz = _validate_timezone(request.timezone)
     token = _request_timezone.set(tz)
     try:
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=request.message),
-        ]
+        # Build message list with conversation history (last 20 exchanges to limit context size)
+        messages: list = [SystemMessage(content=SYSTEM_PROMPT)]
+        if request.history:
+            for h in request.history[-20:]:  # keep last 20 messages
+                if h.role == "user":
+                    messages.append(HumanMessage(content=h.content))
+                elif h.role == "assistant":
+                    messages.append(AIMessage(content=h.content))
+        messages.append(HumanMessage(content=request.message))
         tools_by_name = {
             get_affected_clients.name: get_affected_clients,
             check_availability.name: check_availability,
