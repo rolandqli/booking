@@ -66,13 +66,14 @@ def _times_overlap(
 
 def _check_all_appointments_for_overlap(
     supabase,
-    person_id: UUID, 
+    person_id: UUID,
     person_type: str,
     start_time: datetime,
     end_time: datetime,
+    exclude_appointment_id: Optional[UUID] = None,
 ) -> None:
     """Raise HTTPException if any appointment overlaps with the given time range."""
-    id_type = f"{person_type.lower()}_id" 
+    id_type = f"{person_type.lower()}_id"
     appointments = (
         supabase.table("appointments")
         .select("id, start_time, end_time, status")
@@ -81,14 +82,34 @@ def _check_all_appointments_for_overlap(
         .execute()
     )
     for apt in appointments.data or []:
+        if exclude_appointment_id and str(apt["id"]) == str(exclude_appointment_id):
+            continue
         existing_start = datetime.fromisoformat(apt["start_time"].replace("Z", "+00:00"))
         existing_end = datetime.fromisoformat(apt["end_time"].replace("Z", "+00:00"))
         if _times_overlap(start_time, end_time, existing_start, existing_end):
             detail = f"{person_type} already has an appointment at this time"
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=detail
+                detail=detail,
             )
+
+
+def _check_no_room_overlap(
+    supabase,
+    room_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    exclude_appointment_id: Optional[UUID] = None,
+) -> None:
+    """Raise HTTPException if room is already booked at this time."""
+    _check_all_appointments_for_overlap(
+        supabase,
+        room_id,
+        "room",
+        start_time,
+        end_time,
+        exclude_appointment_id=exclude_appointment_id,
+    )
 
 def _check_no_client_provider_overlap(
     supabase,
@@ -106,6 +127,7 @@ def _check_no_client_provider_overlap(
             person_type=person_type,
             start_time=start_time,
             end_time=end_time,
+            exclude_appointment_id=exclude_appointment_id,
         )
 
 
@@ -167,6 +189,13 @@ def create_appointment(appointment: AppointmentCreate):
         appointment.start_time,
         appointment.end_time,
     )
+    if appointment.room_id is not None:
+        _check_no_room_overlap(
+            supabase,
+            appointment.room_id,
+            appointment.start_time,
+            appointment.end_time,
+        )
     data = appointment.model_dump()
     data = {k: _serialize_uuid(v) for k, v in data.items()}
     data["updated_at"] = datetime.utcnow().isoformat()
@@ -267,6 +296,15 @@ def update_appointment(appointment_id: UUID, appointment: AppointmentUpdate):
         end_time,
         exclude_appointment_id=appointment_id,
     )
+    room_id = effective.get("room_id")
+    if room_id is not None:
+        _check_no_room_overlap(
+            supabase,
+            room_id,
+            start_time,
+            end_time,
+            exclude_appointment_id=appointment_id,
+        )
     data = {k: _serialize_uuid(v) for k, v in data.items()}
     data["updated_at"] = datetime.utcnow().isoformat()
     response = (
